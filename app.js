@@ -3,11 +3,11 @@
  * Module dependencies.
  */
 
-var express = require('express')
-  , routes = require('./routes')
-  , user = require('./routes/user')
-  , http = require('http')
-  , path = require('path');
+var express = require('express'),
+  	routes = require('./routes'),
+  	user = require('./routes/user'),
+  	http = require('http'),
+  	path = require('path');
 
 var app = express();
 
@@ -30,6 +30,40 @@ if ('development' == app.get('env')) {
 app.get('/', routes.index);
 app.get('/users', user.list);
 
-http.createServer(app).listen(app.get('port'), function(){
-  console.log('Express server listening on port ' + app.get('port'));
+var io = require('socket.io').listen(app.get('port')),
+	sockets = {};
+
+io.sockets.on("connection", function(socket){
+
+	var joinRoom = function(socket, room){
+		socket.room = room;
+		socket.join(room);
+		socket.emit("chat:users_list", io.sockets.clients(socket.room).map(function(u){ return u.data; }));
+		socket.broadcast.to(socket.room).emit("chat:connected", socket.data);
+	};
+
+	socket.on("chat:login", function(user, args){
+		socket.data = user;
+		sockets[socket.data.name] = socket;
+		joinRoom(socket, args.room);
+	});
+
+	socket.on("chat:message", function(message, args){
+		var _socket = socket.broadcast.to(socket.room);
+		if (args && args.to && sockets[args.to])
+			_socket = sockets[args.to];
+		_socket.emit("message", message, socket.data, _socket.data);
+	});
+
+	socket.on("chat:room", function(room){
+		socket.leave(socket.room)
+		socket.broadcast.to(socket.room).emit("chat:disconnected", socket.data);
+		joinRoom(socket, room);
+	});
+
+	socket.on("disconnect", function(){
+		socket.leave(socket.room);
+		socket.broadcast.to(socket.room).emit("chat:disconnected", socket.data);
+		delete sockets[socket.data.name];
+	});
 });

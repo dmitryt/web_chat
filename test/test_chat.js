@@ -11,42 +11,153 @@ var should = require("should"),
 	chatuser1 = {name: 'Tom'},
 	chatuser2 = {name: 'Bob'},
 	chatuser3 = {name: 'Den'},
+	chatuser4 = {name: 'Bill'},
 
-	numUsers = 0,
-
-	client1, client2;
+	client1, client2, client3, client4;
 
 describe("Chat server", function(){
-	it("Should broadcast new user to all users", function(done){
-		var connect = function(){
-				return io.connect(url, options);
-			};
+	var users = [],
+		setupUsers = function(arr, args, cb) {
+			var counter = arr.length;
+			arr.forEach(function(data){
+				users.push(io.connect(url, options).on("connect", function(){
+					this.emit('chat:login', data, args);
+					counter--;
+					(counter == 0) && cb && cb();
+				}));
+			});
+		},
+		sortedUsers = function(_users){
+			return _users.sort(function(a, b){
+				if (a.name > b.name) return 1;
+				if (a.name < b.name) return -1;
+				return 0;
+			});
+		},
+		resetUsers = function(){
+			users.forEach(function(user){
+				user.disconnect();
+			});
+			users = [];
+		};
 
-		(client1 = connect()).on("connect", function(data){
-			client1.emit('chat:login', chatuser1);
-			
-			(client2 = connect()).on("connect", function(data){
-				client2.emit('chat:login', chatuser2);
+	before(resetUsers);
+	afterEach(resetUsers);
+
+	it("Should broadcast new user to all users within the room", function(done){
+		var numUsers;
+
+		setupUsers([chatuser1], {room: 'room1'}, function(){
+			setupUsers([chatuser4], {room: 'room2'});
+			setupUsers([chatuser2, chatuser3], {room: 'room1'});
+		});
+		numUsers = users.length; //the count of users within the 'room1' room
+
+		users[0].on('chat:connected', function(user){
+			numUsers++;
+			var connectedUsers = [chatuser2, chatuser3].map(function(u){
+				return u.name;
 			});
 
-			client2.on('chat:connected', function(user){
-				console.log('lololo');
-				console.log(user);
-				user.name.should.equal(chatuser1.name);	
-				client2.disconnect();
-			})
-		});
-
-		numUsers = 0;
-
-		client1.on('chat:connected', function(user){
-			numUsers++;
-
-			if (numUsers == 2) {
-				user.name.should.equal(chatuser2.name);
-				client1.disconnect();
+			connectedUsers.should.include(user.name);
+			if (numUsers == 3) {
 				done();
 			}
 		});
 	});
+
+	it("Should broadcast to all users within the room, when anybody has been disconnected", function(done){
+		var notifications = 0;
+		setupUsers([chatuser1, chatuser2, chatuser3, chatuser4], {room: 'room1'}, function(){
+			users[0].disconnect();
+			users.slice(1).forEach(function(u){
+				u.on("chat:disconnected", function(user){
+					user.name.should.eql(chatuser1.name);
+					notifications++;
+					if (notifications == 3) done();
+				});
+			});
+		});
+	});
+
+	it("Should be able to get data of all users inside the room", function(done){
+		setupUsers([chatuser1, chatuser2, chatuser3], {room: 'room1'}, function(){
+			setupUsers([chatuser4], {room: 'room1'});
+
+			users[users.length - 1].on("chat:users_list", function(list){
+				sortedUsers([chatuser1, chatuser2, chatuser3, chatuser4]).should.eql(sortedUsers(list));
+				done();
+			});
+		});
+	});
+
+	it("Should be able to send messages for all users within the room", function(done){
+		var message = "Hello world",
+			receivedUsers,
+			receivedMessages = 0;
+		setupUsers([chatuser1, chatuser2, chatuser3], {room: 'room1'}, function(){
+			setupUsers([chatuser4], {room: 'room2'}, function(){
+				users[0].emit("chat:message", message);
+				receivedUsersNames = [chatuser1, chatuser2, chatuser3].map(function(u){
+					return u.name;
+				});
+				users.slice(1).forEach(function(user){
+					user.on("message", function(_message, _user){
+						receivedMessages++;
+						receivedUsersNames.should.include(_user.name);
+						_message.should.eql(message);
+						if (receivedMessages == 2) {
+							setTimeout(function(){
+								done();
+							}, 100);
+						};
+					})
+				});
+			});
+		});
+	});
+
+	it("Should be able to send private messages to any user inside the room", function(done){
+		var message = "Hello private world";
+		setupUsers([chatuser1, chatuser2, chatuser3, chatuser4], {room: 'room1'}, function(){
+			users[0].emit("chat:message", message, {to: chatuser2.name});
+			users.forEach(function(user){
+				user.on("message", function(_message, from, to){
+					from.name.should.eql(chatuser1.name);
+					to.name.should.eql(chatuser2.name);
+					_message.should.eql(message);
+					setTimeout(function(){
+						done();
+					}, 100);
+				})
+			});
+		});
+	});
+
+	it.skip("Should be able for any user to switch the room", function(done){
+		var changedRoomUsers = [chatuser2, chatuser3].map(function(u){
+			return u.name;
+		}),
+		 usersChangedRoomCount = 0;
+
+		setupUsers([chatuser1, chatuser2, chatuser3, chatuser4], {room: 'room1'}, function(){
+			users.forEach(function(user){
+				user.on("chat:disconnected", function(data){
+					changedRoomUsers.should.include(data.name);
+				});
+			});
+			users.slice(1,3).forEach(function(user){
+				user.emit("chat:room", "room2");
+				user.on("chat:users_list", function(list){
+					usersChangedRoomCount++;
+					if (usersChangedRoomCount == 2) {
+						console.log("!!!!!!!!!!!!!!!!!!!!!!!!", list);
+						sortedUsers(list).should.eql(sortedUsers([chatuser2, chatuser3]));
+						done();
+					}
+				});
+			});
+		});
+	});
+
 });
