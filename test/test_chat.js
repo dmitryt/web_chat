@@ -20,7 +20,9 @@ describe("Chat server", function(){
 		setupUsers = function(arr, args, cb) {
 			var counter = arr.length;
 			arr.forEach(function(data){
-				users.push(io.connect(url, options).on("connect", function(){
+				var socket = io.connect(url, options);
+				socket.data = data;
+				users.push(socket.on("connect", function(){
 					this.emit('chat:login', data, args);
 					counter--;
 					(counter == 0) && cb && cb();
@@ -83,7 +85,6 @@ describe("Chat server", function(){
 	it("Should be able to get data of all users inside the room", function(done){
 		setupUsers([chatuser1, chatuser2, chatuser3], {room: 'room1'}, function(){
 			setupUsers([chatuser4], {room: 'room1'});
-
 			users[users.length - 1].on("chat:users_list", function(list){
 				sortedUsers([chatuser1, chatuser2, chatuser3, chatuser4]).should.eql(sortedUsers(list));
 				done();
@@ -93,23 +94,23 @@ describe("Chat server", function(){
 
 	it("Should be able to send messages for all users within the room", function(done){
 		var message = "Hello world",
-			receivedUsers,
+			receivedUsersNames,
 			receivedMessages = 0;
 		setupUsers([chatuser1, chatuser2, chatuser3], {room: 'room1'}, function(){
 			setupUsers([chatuser4], {room: 'room2'}, function(){
 				users[0].emit("chat:message", message);
-				receivedUsersNames = [chatuser1, chatuser2, chatuser3].map(function(u){
+				receivedUsersNames = [chatuser2, chatuser3].map(function(u){
 					return u.name;
 				});
 				users.slice(1).forEach(function(user){
-					user.on("message", function(_message, _user){
+					user.on("message", function(_message, sender){
 						receivedMessages++;
-						receivedUsersNames.should.include(_user.name);
+						receivedUsersNames.should.include(user.data.name);
+						receivedUsersNames.splice(receivedUsersNames.indexOf(user.data.name), 1);
+						sender.name.should.eql(chatuser1.name);
 						_message.should.eql(message);
 						if (receivedMessages == 2) {
-							setTimeout(function(){
-								done();
-							}, 100);
+							done();
 						};
 					})
 				});
@@ -122,19 +123,17 @@ describe("Chat server", function(){
 		setupUsers([chatuser1, chatuser2, chatuser3, chatuser4], {room: 'room1'}, function(){
 			users[0].emit("chat:message", message, {to: chatuser2.name});
 			users.forEach(function(user){
-				user.on("message", function(_message, from, to){
+				user.on("message", function(_message, from){
 					from.name.should.eql(chatuser1.name);
-					to.name.should.eql(chatuser2.name);
+					user.data.name.should.eql(chatuser2.name);
 					_message.should.eql(message);
-					setTimeout(function(){
-						done();
-					}, 100);
+					done();
 				})
 			});
 		});
 	});
 
-	it.skip("Should be able for any user to switch the room", function(done){
+	it("Should be able for any user to switch the room", function(done){
 		var changedRoomUsers = [chatuser2, chatuser3].map(function(u){
 			return u.name;
 		}),
@@ -148,11 +147,10 @@ describe("Chat server", function(){
 			});
 			users.slice(1,3).forEach(function(user){
 				user.emit("chat:room", "room2");
-				user.on("chat:users_list", function(list){
+				user.on("chat:connected", function(){
 					usersChangedRoomCount++;
+					changedRoomUsers.should.include(this.data.name);
 					if (usersChangedRoomCount == 2) {
-						console.log("!!!!!!!!!!!!!!!!!!!!!!!!", list);
-						sortedUsers(list).should.eql(sortedUsers([chatuser2, chatuser3]));
 						done();
 					}
 				});

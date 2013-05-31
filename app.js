@@ -36,11 +36,18 @@ var io = require('socket.io').listen(app.get('port')),
 io.sockets.on("connection", function(socket){
 
 	var joinRoom = function(socket, room){
-		socket.room = room;
-		socket.join(room);
-		socket.emit("chat:users_list", io.sockets.clients(socket.room).map(function(u){ return u.data; }));
-		socket.broadcast.to(socket.room).emit("chat:connected", socket.data);
-	};
+			socket.room = room;
+			socket.join(room);
+			socket.broadcast.to(socket.room).emit("chat:connected", socket.data);
+			socket.emit("chat:users_list", getUsersWithinTheRoom(socket.room));
+		},
+		disconnect = function(socket) {
+			socket.leave(socket.room)
+			socket.broadcast.to(socket.room).emit("chat:disconnected", socket.data);	
+		},
+		getUsersWithinTheRoom = function(room) {
+			return io.sockets.clients(room).map(function(u){ return u.data; });
+		};
 
 	socket.on("chat:login", function(user, args){
 		socket.data = user;
@@ -52,18 +59,16 @@ io.sockets.on("connection", function(socket){
 		var _socket = socket.broadcast.to(socket.room);
 		if (args && args.to && sockets[args.to])
 			_socket = sockets[args.to];
-		_socket.emit("message", message, socket.data, _socket.data);
+		_socket && _socket.emit("message", message, socket.data);
 	});
 
 	socket.on("chat:room", function(room){
-		socket.leave(socket.room)
-		socket.broadcast.to(socket.room).emit("chat:disconnected", socket.data);
+		disconnect(socket);
 		joinRoom(socket, room);
 	});
 
 	socket.on("disconnect", function(){
-		socket.leave(socket.room);
-		socket.broadcast.to(socket.room).emit("chat:disconnected", socket.data);
+		disconnect(socket);
 		delete sockets[socket.data.name];
 	});
 });
