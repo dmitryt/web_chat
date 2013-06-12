@@ -1,0 +1,42 @@
+extends layout
+
+block content
+	h1= title
+	form(method='post', action='/login')
+		label(for="login_field") Логин:
+		input(name="username", type="input", id="login_field")
+		br
+		label(for="password_field")	Пароль:
+		input(name="password", type="password", id="password_field")
+		div
+			Ваш пол:
+			- var saxes = [{value: "M", label: "Мужской", checked: true}, {value: "W", label: "Женский"}, {value: "", label: "Секрет"}]
+			- each item in saxes
+				div
+					label
+						- if (item["checked"])
+							input(name="sex", type="radio", value=item["value"], checked="")
+						- else
+							input(name="sex", type="radio", value= item["value"])
+						span= item["label"]
+		div
+			Выберите комнату:
+			- var rooms = [{value: "main", label: "Главная", checked: true}, {value: "meet", label: "Встречи"}, {value: "something", label: "Беспредел"}]
+			- each item in rooms
+				div
+					label
+						- if (item["checked"])
+							input(name="room", type="radio", value= item["value"], checked="")
+						- else
+							input(name="room", type="radio", value= item["value"])
+						span= item["label"]
+		div
+			Выберите цвет:
+			- var colors = ["#000000", "#999900", "#0033FF", "#9933CC", "#CC6699", "#FF3300", "#CC3300"]
+			- each item in colors
+				label(style="padding: 5px; display: inline-block; background-color:" + item)
+					- if (item == colors[0])
+						input(name="color", type="radio", value= item, checked="")
+					- else
+						input(name="color", type="radio", value= item)
+		input(type="submit", value="Войти")

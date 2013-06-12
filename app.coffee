@@ -8,24 +8,43 @@ http = require('http')
 path = require('path')
 
 app = express()
+server = http.createServer(app)
+io = require('socket.io').listen(server)
 
 # all environments
-app.set('port', process.env.PORT || 8080)
-app.set('views', __dirname + '/views')
-app.set('view engine', 'jade')
-app.use(express.favicon())
+
+app.configure ->
+	app.set 'port', process.env.PORT || 8080
+	app.set 'views', __dirname + '/views'
+	app.set 'view engine', 'jade'
+	app.use express.bodyParser()
+	app.use express.methodOverride()
+	app.use app.router
+	app.use(express.static(path.join(__dirname, 'public')))
+
+app.configure 'development', ->
+	app.set 'address', 'localhost'
+	app.use express.errorHandler
+    	dumpExceptions: true,
+    	showStack: true
+
 app.use(express.logger('dev'))
-app.use(express.bodyParser())
-app.use(express.methodOverride())
-app.use(app.router)
-app.use(express.static(path.join(__dirname, 'public')))
 
 # development only
 
 app.use(express.errorHandler()) if 'development' == app.get('env')
 
-io = require('socket.io').listen(app.get('port'))
+server.listen(app.get('port'))
+
 sockets = {}
+
+# Routing
+
+# routing
+app.get '/', (req, res) ->
+  res.render app.get('views') + '/login.jade',
+  	title: 'Login Page'
+  false
 
 io.sockets.on "connection", (socket) ->
 
