@@ -8,9 +8,10 @@ http = require('http')
 path = require('path')
 
 sockets = require('./sockets')
-chat = require('./chat')
 
 app = express()
+chat = require('./chat')(app)
+
 server = http.createServer(app)
 
 # all environments
@@ -35,13 +36,6 @@ app.use(express.logger('dev'))
 # development only
 
 app.use(express.errorHandler()) if 'development' == app.get('env')
-
-# Routing
-app.get '/', ->
-	args = [].slice.call(arguments).concat([app])
-	console.log('!!!!!!!!!!!!!!!', args)
-	chat.login.apply(chat.login, [].slice.call(arguments).concat([app]))
-app.post '/', chat.authorize
 
 # Starting application
 server.listen(app.get('port'))

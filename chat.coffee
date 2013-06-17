@@ -1,7 +1,9 @@
-exports.login = (req, res, app) ->
-	res.render app.get('views') + '/login.jade',
-	    title: 'Login Page'
-	false
+module.exports = (app) ->
+	# Routing
+	app.get '/', (req, res) -> 
+		res.render app.get('views') + '/login',
+		    title: 'Login Page'
+		false
 
-exports.authorize = (req, res) ->
-	false
+	app.post '/', (req, res, app) ->
+		false
